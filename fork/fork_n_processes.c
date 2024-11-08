@@ -5,7 +5,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 
-#define N 5 // Number of processes
+#define N 100 // Number of processes
 
 int main()
 {

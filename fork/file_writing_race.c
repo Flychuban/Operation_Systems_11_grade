@@ -7,7 +7,7 @@
 #include <fcntl.h>  // For open() and write()
 #include <string.h> // For strlen()
 
-#define N 5 // Number of processes
+#define N 100 // Number of processes
 
 int main()
 {
@@ -27,6 +27,7 @@ int main()
     for (i = 0; i < N; i++)
     {
         pid = fork();
+        
 
         if (pid < 0)
         { // Check for error in fork()

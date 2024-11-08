@@ -7,7 +7,7 @@
 #include <fcntl.h> // For file locking (fcntl)
 #include <string.h>
 
-#define N 5 // Number of processes
+#define N 100 // Number of processes
 
 void lock_file(int fd)
 {
@@ -23,6 +23,7 @@ void lock_file(int fd)
         perror("Failed to acquire file lock");
         exit(EXIT_FAILURE);
     }
+    fprintf(stderr, "File locked.\n");
 }
 
 void unlock_file(int fd)
@@ -39,6 +40,7 @@ void unlock_file(int fd)
         perror("Failed to release file lock");
         exit(EXIT_FAILURE);
     }
+    fprintf(stderr, "File unlocked.\n");
 }
 
 int main()
@@ -78,12 +80,12 @@ int main()
 
             // Flush the output to ensure it is written immediately
             fsync(fd);
+            fprintf(stderr, "Child %d wrote to the file.\n", i);
 
             // Release the lock after writing
             unlock_file(fd);
 
             // Inform that the child wrote to the file
-            printf("Child %d wrote to the file.\n", i);
             exit(EXIT_SUCCESS); // Exit the child process after work is done
         }
     }
