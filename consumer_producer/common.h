@@ -12,34 +12,36 @@
 #include <time.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdatomic.h>
 
 // Constants
-#define BUFFER_SIZE 1000
+#define BUFFER_SIZE 10000 // Increased buffer size for better throughput
 #define SHM_NAME "/task_queue"
 #define SEM_EMPTY "/sem_empty"
 #define SEM_FULL "/sem_full"
 #define SEM_MUTEX "/sem_mutex"
+#define BATCH_SIZE 64 // Process tasks in batches
 
-// Task structure
-typedef struct
+// Task structure - aligned for better cache performance
+typedef struct __attribute__((aligned(64)))
 {
-    int type; // 0 for simple, 1 for complex
+    atomic_int type; // 0 for simple, 1 for complex
     union
     {
-        int simple_data;
+        atomic_int simple_data;
         char complex_data[256]; // For complex tasks (strings/JSON)
     } data;
 } Task;
 
-// Shared memory structure
-typedef struct
+// Shared memory structure - aligned for better cache performance
+typedef struct __attribute__((aligned(64)))
 {
     Task buffer[BUFFER_SIZE];
-    int in;              // Producer position
-    int out;             // Consumer position
-    int producer_active; // Flag to indicate if producer is running
-    long total_tasks;    // Total tasks produced
-    time_t start_time;   // Start time for performance measurement
+    atomic_int in;              // Producer position
+    atomic_int out;             // Consumer position
+    atomic_int producer_active; // Flag to indicate if producer is running
+    atomic_long total_tasks;    // Total tasks produced
+    atomic_long start_time;     // Start time for performance measurement
 } SharedMemory;
 
 // Function declarations

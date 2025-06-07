@@ -5,6 +5,7 @@ sem_t *sem_empty, *sem_full, *sem_mutex;
 int shm_fd;
 SharedMemory *shared_mem;
 volatile sig_atomic_t running = 1;
+long processed_tasks = 0; // Counter for processed tasks
 
 void signal_handler(int signum)
 {
@@ -33,6 +34,27 @@ void handle_error(const char *msg)
     perror(msg);
     cleanup_resources();
     exit(EXIT_FAILURE);
+}
+
+// Helper function to safely wait on semaphore
+void safe_sem_wait(sem_t *sem, const char *msg)
+{
+    while (sem_wait(sem) == -1)
+    {
+        if (errno != EINTR)
+        {
+            handle_error(msg);
+        }
+    }
+}
+
+// Helper function to safely post to semaphore
+void safe_sem_post(sem_t *sem, const char *msg)
+{
+    if (sem_post(sem) == -1)
+    {
+        handle_error(msg);
+    }
 }
 
 int main(void)
@@ -71,37 +93,60 @@ int main(void)
     while (running)
     {
         // Check if producer is still active
-        if (!shared_mem->producer_active)
+        if (!atomic_load(&shared_mem->producer_active))
         {
             printf("Producer is no longer active. Consumer shutting down...\n");
             break;
         }
 
-        // Wait for a task
-        sem_wait(sem_full);
-        sem_wait(sem_mutex);
-
-        // Get task from buffer
-        Task task = shared_mem->buffer[shared_mem->out];
-        shared_mem->out = (shared_mem->out + 1) % BUFFER_SIZE;
-
-        sem_post(sem_mutex);
-        sem_post(sem_empty);
-
-        // Process the task
-        if (task.type == 0)
+        // Wait for a batch of tasks
+        for (int i = 0; i < BATCH_SIZE && running; i++)
         {
-            // Simple task
-            printf("Processed simple task: %d\n", task.data.simple_data);
+            safe_sem_wait(sem_full, "sem_wait full failed");
         }
-        else
+
+        // Acquire mutex once for the entire batch
+        safe_sem_wait(sem_mutex, "sem_wait mutex failed");
+
+        // Process a batch of tasks
+        int current_out = atomic_load(&shared_mem->out);
+        for (int i = 0; i < BATCH_SIZE && running; i++)
         {
-            // Complex task
-            printf("Processed complex task: %s\n", task.data.complex_data);
+            Task task = shared_mem->buffer[current_out];
+            current_out = (current_out + 1) % BUFFER_SIZE;
+
+            // Process the task (minimal processing as per requirements)
+            if (task.type == 0)
+            {
+                // Simple task - just consume it
+                (void)atomic_load(&task.data.simple_data);
+            }
+            else
+            {
+                // Complex task - just consume it
+                (void)task.data.complex_data;
+            }
+
+            processed_tasks++;
+
+            // Log every 10,000 tasks
+            if (processed_tasks % 10000 == 0)
+            {
+                printf("Processed %ld tasks\n", processed_tasks);
+            }
+        }
+        atomic_store(&shared_mem->out, current_out);
+
+        safe_sem_post(sem_mutex, "sem_post mutex failed");
+
+        // Signal empty slots for the entire batch
+        for (int i = 0; i < BATCH_SIZE && running; i++)
+        {
+            safe_sem_post(sem_empty, "sem_post empty failed");
         }
     }
 
-    printf("Consumer shutting down...\n");
+    printf("Consumer shutting down after processing %ld tasks\n", processed_tasks);
     cleanup_resources();
     return 0;
 }
